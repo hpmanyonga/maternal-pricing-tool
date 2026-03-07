@@ -7,6 +7,7 @@ import streamlit as st
 import pandas as pd
 from engine.pricing_engine import PricingEngine
 from engine.models import PatientProfile
+from engine.coopland_engine import CooplandEngine, COOPLAND_FACTORS
 
 OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
 
@@ -67,28 +68,51 @@ enrollment_route = st.sidebar.radio(
 )
 
 st.sidebar.divider()
+st.sidebar.subheader("Coopland Risk Assessment")
 
-use_coopland = st.sidebar.checkbox("Enter Coopland Score directly", value=False)
-if use_coopland:
-    coopland_score = st.sidebar.slider("Coopland Score", 0, 15, 2)
-    if coopland_score <= 3:
-        risk_category = "BASE"
-    elif coopland_score <= 6:
-        risk_category = "MEDIUM"
-    else:
-        risk_category = "HIGH"
-    st.sidebar.info(f"Derived risk: **{risk_category}** (Coopland {coopland_score})")
-else:
-    risk_category = st.sidebar.selectbox(
-        "Risk Category",
-        options=["BASE", "MEDIUM", "HIGH"],
-        format_func=lambda x: {
-            "BASE": "Base (Coopland ≤3)",
-            "MEDIUM": "Medium (Coopland 4–6)",
-            "HIGH": "High (Coopland ≥7)",
-        }[x],
-        index=0,
-    )
+# Group factors by category for cleaner UI
+FACTOR_GROUPS = {
+    "Demographic": [
+        "maternal_age_extremes", "teenage_pregnancy", "short_stature",
+        "extreme_weight", "poor_socioeconomic_status",
+    ],
+    "Obstetric History": [
+        "grand_multiparity", "primigravida", "previous_cs",
+        "previous_stillbirth", "previous_preterm_delivery", "previous_pph",
+        "previous_low_birth_weight", "previous_macrosomia", "history_of_infertility",
+    ],
+    "Medical Conditions": [
+        "chronic_hypertension", "diabetes_mellitus", "cardiac_disease",
+        "renal_disease", "epilepsy", "mental_illness", "hiv_positive",
+        "anaemia", "rh_negative", "tb_or_recent_infection", "malaria",
+    ],
+    "Current Pregnancy": [
+        "multiple_pregnancy", "abnormal_lie", "recurrent_uti",
+        "poor_anc_attendance", "poor_nutrition",
+    ],
+    "Social / Behavioural": [
+        "smoking_or_substance_use", "domestic_violence",
+    ],
+}
+
+factors_present = {}
+for group_name, factor_keys in FACTOR_GROUPS.items():
+    with st.sidebar.expander(group_name):
+        for key in factor_keys:
+            weight = COOPLAND_FACTORS[key]
+            label = key.replace("_", " ").title() + f" (+{weight})"
+            factors_present[key] = st.checkbox(label, value=False, key=f"coop_{key}")
+
+coopland_engine = CooplandEngine()
+coopland_result = coopland_engine.score(factors_present)
+
+risk_category = {
+    "LOW": "BASE", "MEDIUM": "MEDIUM", "HIGH": "HIGH"
+}[coopland_result.risk_band]
+
+st.sidebar.divider()
+st.sidebar.metric("Coopland Score", coopland_result.total_score)
+st.sidebar.info(f"Risk band: **{coopland_result.risk_band}** → {coopland_result.extra_consults} extra consults, {coopland_result.extra_ultrasounds} extra scans")
 
 delivery_mode = st.sidebar.selectbox(
     "Delivery Mode",
@@ -120,6 +144,22 @@ col1, col2, col3 = st.columns(3)
 col1.metric("Global Fee", f"R {result.global_fee:,.0f}")
 col2.metric("Total Add-ons", f"R {result.total_addons:,.0f}")
 col3.metric("Final Price", f"R {result.final_price:,.0f}")
+
+# ==============================
+# COOPLAND SCORING DETAIL
+# ==============================
+if coopland_result.risk_drivers:
+    st.subheader("Coopland Risk Factors")
+    driver_rows = [
+        {"Factor": d.replace("_", " ").title(), "Weight": COOPLAND_FACTORS[d]}
+        for d in coopland_result.risk_drivers
+    ]
+    driver_rows.append({"Factor": "TOTAL", "Weight": coopland_result.total_score})
+    st.dataframe(
+        pd.DataFrame(driver_rows),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 # ==============================
 # LINE-ITEM BREAKDOWN
