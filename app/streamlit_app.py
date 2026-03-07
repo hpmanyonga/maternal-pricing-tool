@@ -9,6 +9,8 @@ from engine.pricing_engine import PricingEngine
 from engine.models import PatientProfile
 from engine.coopland_engine import CooplandEngine, COOPLAND_FACTORS
 from engine.eligibility_engine import EligibilityEngine
+from engine.hrantn_document import generate_hrantn_pdf
+import tempfile
 
 OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
 
@@ -160,6 +162,51 @@ if eligibility.potential_delivery_carveouts:
     with st.expander(f"Potential Delivery Carve-outs ({len(eligibility.potential_delivery_carveouts)})"):
         for item in eligibility.potential_delivery_carveouts:
             st.markdown(f"- {item}")
+
+# ==============================
+# HRANTN AUTHORISATION DOCUMENT
+# ==============================
+if eligibility.requires_authorisation and coopland_result.risk_drivers:
+    st.subheader("HRANTN Authorisation Request")
+    st.markdown("Complete the fields below to generate a PDF authorisation request.")
+
+    col_name, col_id = st.columns(2)
+    with col_name:
+        patient_name = st.text_input("Patient Name", value="", key="hrantn_name")
+    with col_id:
+        medical_aid_number = st.text_input("Medical Aid Number", value="", key="hrantn_id")
+
+    plan_display = {
+        "KEYCARE": "KeyCare", "SMART": "Smart",
+        "COASTAL_ESSENTIAL": "Coastal & Essential",
+        "CLASSIC": "Classic", "EXECUTIVE": "Executive",
+    }
+
+    if patient_name and medical_aid_number:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            generate_hrantn_pdf(
+                output_path=Path(tmp.name),
+                patient_name=patient_name,
+                medical_aid_number=medical_aid_number,
+                plan_name=plan_display.get(plan_type, plan_type),
+                gestational_age_weeks=booking_weeks,
+                booking_category=enrollment_route,
+                coopland_score=coopland_result.total_score,
+                risk_band=coopland_result.risk_band,
+                risk_drivers=coopland_result.risk_drivers,
+                extra_consults=coopland_result.extra_consults,
+                extra_ultrasounds=coopland_result.extra_ultrasounds,
+            )
+            pdf_bytes = Path(tmp.name).read_bytes()
+
+        st.download_button(
+            label="Download HRANTN Authorisation PDF",
+            data=pdf_bytes,
+            file_name=f"HRANTN_{medical_aid_number}_{patient_name.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+        )
+    else:
+        st.info("Enter patient name and medical aid number to generate the PDF.")
 
 # ==============================
 # COOPLAND SCORING DETAIL
