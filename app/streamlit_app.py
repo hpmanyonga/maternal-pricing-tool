@@ -8,6 +8,7 @@ import pandas as pd
 from engine.pricing_engine import PricingEngine
 from engine.models import PatientProfile
 from engine.coopland_engine import CooplandEngine, COOPLAND_FACTORS
+from engine.eligibility_engine import EligibilityEngine
 
 OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
 
@@ -68,6 +69,14 @@ enrollment_route = st.sidebar.radio(
 )
 
 st.sidebar.divider()
+st.sidebar.subheader("Eligibility")
+
+maternal_age = st.sidebar.number_input("Maternal Age", min_value=12, max_value=55, value=28)
+booking_weeks = st.sidebar.number_input("Booking Gestation (weeks)", min_value=4.0, max_value=40.0, value=12.0, step=0.5)
+multiple_pregnancy = st.sidebar.checkbox("Multiple Pregnancy (twins+)")
+uncontrolled_chronic = st.sidebar.checkbox("Uncontrolled Chronic Disease")
+
+st.sidebar.divider()
 st.sidebar.subheader("Coopland Risk Assessment")
 
 # Group factors by category for cleaner UI
@@ -125,25 +134,32 @@ chronic_flag = st.sidebar.checkbox("Chronic Condition")
 complication_flag = st.sidebar.checkbox("Complications")
 
 # ==============================
-# PRICING RESULT
+# ELIGIBILITY CHECK
 # ==============================
-profile = PatientProfile(
-    plan_type=plan_type,
-    enrollment_route=enrollment_route,
-    risk_category=risk_category,
-    delivery_mode=delivery_mode,
-    chronic_flag=chronic_flag,
-    complication_flag=complication_flag,
+eligibility_engine = EligibilityEngine()
+eligibility = eligibility_engine.evaluate(
+    coopland_score=coopland_result.total_score,
+    maternal_age=maternal_age,
+    multiple_pregnancy=multiple_pregnancy,
+    uncontrolled_chronic_disease=uncontrolled_chronic,
+    booking_weeks=booking_weeks,
 )
 
-result = engine.price_patient(profile)
+st.header("Eligibility")
 
-st.header("Pricing Result")
+if eligibility.eligible_for_global_fee:
+    st.success("**Eligible** for global fee")
+    if eligibility.requires_authorisation:
+        st.warning(f"Authorisation required: **{eligibility.authorisation_type}**")
+else:
+    st.error(f"**Not eligible** for global fee — {eligibility.exclusion_reason}")
+    if eligibility.requires_authorisation:
+        st.info(f"Authorisation type: **{eligibility.authorisation_type}**")
 
-col1, col2, col3 = st.columns(3)
-col1.metric("Global Fee", f"R {result.global_fee:,.0f}")
-col2.metric("Total Add-ons", f"R {result.total_addons:,.0f}")
-col3.metric("Final Price", f"R {result.final_price:,.0f}")
+if eligibility.potential_delivery_carveouts:
+    with st.expander(f"Potential Delivery Carve-outs ({len(eligibility.potential_delivery_carveouts)})"):
+        for item in eligibility.potential_delivery_carveouts:
+            st.markdown(f"- {item}")
 
 # ==============================
 # COOPLAND SCORING DETAIL
@@ -162,52 +178,78 @@ if coopland_result.risk_drivers:
     )
 
 # ==============================
-# LINE-ITEM BREAKDOWN
+# PRICING RESULT
 # ==============================
-st.subheader("Line-Item Breakdown")
+if eligibility.eligible_for_global_fee:
+    profile = PatientProfile(
+        plan_type=plan_type,
+        enrollment_route=enrollment_route,
+        risk_category=risk_category,
+        delivery_mode=delivery_mode,
+        chronic_flag=chronic_flag,
+        complication_flag=complication_flag,
+    )
 
-line_items = result.to_line_items()
-line_df = pd.DataFrame(line_items)
-st.dataframe(
-    line_df.style.format({"amount": "R {:,.0f}"}),
-    use_container_width=True,
-    hide_index=True,
-)
+    result = engine.price_patient(profile)
 
-# ==============================
-# PAYMENT STAGES
-# ==============================
-st.subheader("Payment Stages")
+    st.header("Pricing Result")
 
-stage_df = pd.DataFrame([
-    {"Stage": result.enrollment_route, "Amount": result.antn1_amount},
-    {"Stage": "ANTN2", "Amount": result.antn2_amount},
-    {"Stage": "Delivery", "Amount": result.delivery_amount},
-])
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Global Fee", f"R {result.global_fee:,.0f}")
+    col2.metric("Total Add-ons", f"R {result.total_addons:,.0f}")
+    col3.metric("Final Price", f"R {result.final_price:,.0f}")
 
-st.dataframe(
-    stage_df.style.format({"Amount": "R {:,.0f}"}),
-    use_container_width=True,
-    hide_index=True,
-)
+    # ==============================
+    # LINE-ITEM BREAKDOWN
+    # ==============================
+    st.subheader("Line-Item Breakdown")
 
-# ==============================
-# ADD-ON BREAKDOWN
-# ==============================
-if result.total_addons > 0:
-    st.subheader("Add-on Breakdown")
-    addon_items = [
-        {"Add-on": "Risk", "Amount": result.risk_addon},
-        {"Add-on": "Chronic", "Amount": result.chronic_addon},
-        {"Add-on": "Complication", "Amount": result.complication_addon},
-        {"Add-on": "CS Differential", "Amount": result.cs_addon},
-    ]
-    addon_df = pd.DataFrame([a for a in addon_items if a["Amount"] > 0])
+    line_items = result.to_line_items()
+    line_df = pd.DataFrame(line_items)
     st.dataframe(
-        addon_df.style.format({"Amount": "R {:,.0f}"}),
+        line_df.style.format({"amount": "R {:,.0f}"}),
         use_container_width=True,
         hide_index=True,
     )
+
+    # ==============================
+    # PAYMENT STAGES
+    # ==============================
+    st.subheader("Payment Stages")
+
+    stage_df = pd.DataFrame([
+        {"Stage": result.enrollment_route, "Amount": result.antn1_amount},
+        {"Stage": "ANTN2", "Amount": result.antn2_amount},
+        {"Stage": "Delivery", "Amount": result.delivery_amount},
+    ])
+
+    st.dataframe(
+        stage_df.style.format({"Amount": "R {:,.0f}"}),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    # ==============================
+    # ADD-ON BREAKDOWN
+    # ==============================
+    if result.total_addons > 0:
+        st.subheader("Add-on Breakdown")
+        addon_items = [
+            {"Add-on": "Risk", "Amount": result.risk_addon},
+            {"Add-on": "Chronic", "Amount": result.chronic_addon},
+            {"Add-on": "Complication", "Amount": result.complication_addon},
+            {"Add-on": "CS Differential", "Amount": result.cs_addon},
+        ]
+        addon_df = pd.DataFrame([a for a in addon_items if a["Amount"] > 0])
+        st.dataframe(
+            addon_df.style.format({"Amount": "R {:,.0f}"}),
+            use_container_width=True,
+            hide_index=True,
+        )
+else:
+    st.header("Pricing Result")
+    st.warning("Global fee pricing not available — patient is excluded. "
+               "This case would be billed on a fee-for-service basis.")
 
 # ==============================
 # FEE SCHEDULE REFERENCE
