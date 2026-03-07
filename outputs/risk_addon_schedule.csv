@@ -1,0 +1,4 @@
+risk_category,coopland_range,extra_consults,extra_scans,addon_keycare,addon_other
+BASE,0-3,0,0,0,0
+MEDIUM,4-6,2,1,5178,6400
+HIGH,7+,4,2,10356,12800
