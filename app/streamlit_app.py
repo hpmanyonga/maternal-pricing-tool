@@ -145,15 +145,11 @@ stage_df = pd.DataFrame([
     {"Stage": "Delivery", "Amount": result.delivery_amount},
 ])
 
-col_chart, col_table = st.columns(2)
-with col_chart:
-    st.bar_chart(stage_df.set_index("Stage"))
-with col_table:
-    st.dataframe(
-        stage_df.style.format({"Amount": "R {:,.0f}"}),
-        use_container_width=True,
-        hide_index=True,
-    )
+st.dataframe(
+    stage_df.style.format({"Amount": "R {:,.0f}"}),
+    use_container_width=True,
+    hide_index=True,
+)
 
 # ==============================
 # ADD-ON BREAKDOWN
@@ -167,7 +163,11 @@ if result.total_addons > 0:
         {"Add-on": "CS Differential", "Amount": result.cs_addon},
     ]
     addon_df = pd.DataFrame([a for a in addon_items if a["Amount"] > 0])
-    st.bar_chart(addon_df.set_index("Add-on"))
+    st.dataframe(
+        addon_df.style.format({"Amount": "R {:,.0f}"}),
+        use_container_width=True,
+        hide_index=True,
+    )
 
 # ==============================
 # FEE SCHEDULE REFERENCE
