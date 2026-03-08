@@ -17,6 +17,7 @@ from engine.eligibility_engine import EligibilityEngine
 from engine.noh_cash_eligibility import NOHCashEligibilityEngine
 from engine.noh_cash_engine import NOHCashPricingEngine
 from engine.hrantn_document import generate_hrantn_pdf
+from engine.msa_document import generate_msa_docx
 import tempfile
 
 OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
@@ -686,3 +687,43 @@ with programme_tab2:
             use_container_width=True,
             hide_index=True,
         )
+
+    # ----------------------------------------------------------
+    # MSA DOCUMENT GENERATION (always visible)
+    # ----------------------------------------------------------
+    st.divider()
+    st.subheader("Medical Service Agreement")
+
+    msa_col1, msa_col2 = st.columns(2)
+    with msa_col1:
+        msa_patient_name = st.text_input(
+            "Patient Full Name (with title)",
+            placeholder="e.g. Mrs Jane Doe",
+            key="msa_patient_name",
+        )
+    with msa_col2:
+        msa_id_number = st.text_input(
+            "ID / Passport Number",
+            placeholder="e.g. 9001015000088",
+            key="msa_id_number",
+        )
+
+    if noh_eligibility.eligible_for_global_fee and msa_patient_name and msa_id_number:
+        msa_buf = generate_msa_docx(
+            patient_name=msa_patient_name,
+            id_number=msa_id_number,
+            gestational_age_weeks=noh_ga,
+            global_fee=noh_result.total_price,
+            months_to_34_weeks=noh_result.months_to_34_weeks,
+            monthly_payment=noh_result.monthly_payment,
+        )
+        st.download_button(
+            label="Download MSA (.docx)",
+            data=msa_buf,
+            file_name=f"MSA_{msa_patient_name.replace(' ', '_')}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    elif not noh_eligibility.eligible_for_global_fee:
+        st.caption("Patient must be eligible for the programme to generate the MSA.")
+    else:
+        st.caption("Enter patient name and ID above to generate the MSA.")
