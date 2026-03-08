@@ -17,7 +17,7 @@ from engine.eligibility_engine import EligibilityEngine
 from engine.noh_cash_eligibility import NOHCashEligibilityEngine
 from engine.noh_cash_engine import NOHCashPricingEngine
 from engine.hrantn_document import generate_hrantn_pdf
-from engine.msa_document import generate_msa_docx
+from engine.msa_document import generate_msa_docx, generate_discovery_msa_docx
 import tempfile
 
 OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
@@ -367,6 +367,71 @@ with programme_tab1:
     with ref_tab4:
         case_df = load_table("case_mix_distribution.csv")
         st.dataframe(case_df, use_container_width=True, hide_index=True)
+
+    # ==============================
+    # MSA — DISCOVERY GLOBAL FEE
+    # ==============================
+    st.divider()
+    st.header("Medical Service Agreement")
+
+    dis_msa_col1, dis_msa_col2 = st.columns(2)
+    with dis_msa_col1:
+        dis_msa_title = st.selectbox(
+            "Title", options=["Mrs", "Ms", "Miss", "Dr", "Prof"],
+            key="dis_msa_title",
+        )
+        dis_msa_first = st.text_input(
+            "First Name", placeholder="e.g. Jane", key="dis_msa_first",
+        )
+        dis_msa_surname = st.text_input(
+            "Surname", placeholder="e.g. Doe", key="dis_msa_surname",
+        )
+        dis_msa_id = st.text_input(
+            "ID / Passport Number", placeholder="e.g. 9001015000088",
+            key="dis_msa_id",
+        )
+    with dis_msa_col2:
+        dis_msa_mobile = st.text_input(
+            "Mobile Number", placeholder="e.g. 0821234567",
+            key="dis_msa_mobile",
+        )
+        dis_msa_email = st.text_input(
+            "Email", placeholder="e.g. jane@example.com",
+            key="dis_msa_email",
+        )
+        dis_msa_member = st.text_input(
+            "Membership Number", placeholder="e.g. DH-123456",
+            key="dis_msa_member",
+        )
+        dis_msa_dep = st.text_input(
+            "Dependent Code", placeholder="e.g. 00",
+            key="dis_msa_dep",
+        )
+
+    required_filled = all([dis_msa_first, dis_msa_surname, dis_msa_id, dis_msa_member])
+
+    if required_filled:
+        dis_msa_buf = generate_discovery_msa_docx(
+            title=dis_msa_title,
+            first_name=dis_msa_first,
+            surname=dis_msa_surname,
+            id_number=dis_msa_id,
+            mobile=dis_msa_mobile,
+            email=dis_msa_email,
+            gestational_age_weeks=booking_weeks,
+            plan_type=plan_type,
+            membership_no=dis_msa_member,
+            dependent_code=dis_msa_dep,
+            enrollment_route=enrollment_route,
+        )
+        st.download_button(
+            label="Download Discovery MSA (.docx)",
+            data=dis_msa_buf,
+            file_name=f"MSA_Discovery_{dis_msa_surname}_{dis_msa_first}.docx",
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+    else:
+        st.caption("Fill in First Name, Surname, ID, and Membership Number to generate the MSA.")
 
     # ==============================
     # BATCH PRICING

@@ -1,4 +1,4 @@
-"""Generate a pre-filled Medical Service Agreement (DOCX) from the NOH Cash template."""
+"""Generate pre-filled Medical Service Agreements (DOCX) for NOH Cash and Discovery."""
 
 import hashlib
 import math
@@ -8,7 +8,9 @@ from pathlib import Path
 
 from docx import Document
 
-TEMPLATE_PATH = Path(__file__).resolve().parent.parent / "data" / "msa_template.docx"
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+TEMPLATE_PATH = _DATA_DIR / "msa_template.docx"
+DISCOVERY_TEMPLATE_PATH = _DATA_DIR / "msa_discovery_template.docx"
 
 
 def _generate_reference(patient_name: str, id_number: str) -> str:
@@ -86,6 +88,101 @@ def generate_msa_docx(
     practice_table.rows[0].cells[1].text = "Dr H P Manyonga"
 
     # Write to in-memory buffer
+    buf = BytesIO()
+    doc.save(buf)
+    buf.seek(0)
+    return buf
+
+
+# Plan-type display mapping for Discovery checkbox ticking
+_PLAN_CHECKBOX_MAP = {
+    "KEYCARE": "KeyCare",
+    "SMART": "Smart",
+    "COASTAL_ESSENTIAL": "Coastal/Essential",
+    "CLASSIC": "Classic",
+    "EXECUTIVE": "Executive",
+}
+
+
+def generate_discovery_msa_docx(
+    *,
+    title: str,
+    first_name: str,
+    surname: str,
+    id_number: str,
+    mobile: str,
+    email: str,
+    gestational_age_weeks: float,
+    plan_type: str,
+    membership_no: str,
+    dependent_code: str,
+    enrollment_route: str,
+) -> BytesIO:
+    """
+    Fill in the Discovery Global Fee MSA template.
+
+    No instalment fields — the patient is on the Discovery global fee,
+    so the agreement simply records that they are part of the pilot.
+
+    Returns an in-memory DOCX buffer.
+    """
+    doc = Document(str(DISCOVERY_TEMPLATE_PATH))
+
+    # ------------------------------------------------------------------
+    # Table 0 — Patient & Medical Aid Details (4-column: label, val, label, val)
+    # ------------------------------------------------------------------
+    t0 = doc.tables[0]
+    ref = _generate_reference(f"{first_name} {surname}", id_number).replace("NOH-MSA-", "NOH-DIS-")
+    edd = _estimate_edd(gestational_age_weeks)
+
+    # Row 0: Reference Nr | Date of Agreement
+    t0.rows[0].cells[1].text = ref
+    t0.rows[0].cells[3].text = date.today().strftime("%d %B %Y")
+    # Row 1: Title | Name
+    t0.rows[1].cells[1].text = title
+    t0.rows[1].cells[3].text = first_name
+    # Row 2: ID/Passport | Surname
+    t0.rows[2].cells[1].text = id_number
+    t0.rows[2].cells[3].text = surname
+    # Row 3: Mobile | Email
+    t0.rows[3].cells[1].text = mobile
+    t0.rows[3].cells[3].text = email
+    # Row 4: EDD | Current Gestation
+    t0.rows[4].cells[1].text = edd.strftime("%d %B %Y")
+    t0.rows[4].cells[3].text = f"{gestational_age_weeks:.1f}"
+    # Row 5: Medical Scheme | Plan
+    t0.rows[5].cells[1].text = "Discovery Health"
+    plan_display = _PLAN_CHECKBOX_MAP.get(plan_type, plan_type)
+    t0.rows[5].cells[3].text = plan_display
+    # Row 6: Membership No | Dependent Code
+    t0.rows[6].cells[1].text = membership_no
+    t0.rows[6].cells[3].text = dependent_code
+
+    # ------------------------------------------------------------------
+    # Table 1 — Programme Type: tick Discovery Global Fee + plan
+    # ------------------------------------------------------------------
+    t1 = doc.tables[1]
+    # Tick Discovery row
+    cell_disc = t1.rows[0].cells[0]
+    for para in cell_disc.paragraphs:
+        for run in para.runs:
+            run.text = run.text.replace("\u2610", "\u2611")  # ☐ → ☑
+
+    # Tick the correct plan in the plan-type cell
+    cell_plan = t1.rows[0].cells[1]
+    for para in cell_plan.paragraphs:
+        for run in para.runs:
+            for pkey, plabel in _PLAN_CHECKBOX_MAP.items():
+                if pkey == plan_type:
+                    run.text = run.text.replace(f"\u2610 {plabel}", f"\u2611 {plabel}")
+
+    # ------------------------------------------------------------------
+    # Table 5 — Signatures: pre-fill practice name
+    # ------------------------------------------------------------------
+    t5 = doc.tables[5]
+    t5.rows[2].cells[1].text = "Dr H P Manyonga"
+
+    # ------------------------------------------------------------------
     buf = BytesIO()
     doc.save(buf)
     buf.seek(0)
