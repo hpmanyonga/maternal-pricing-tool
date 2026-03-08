@@ -7,10 +7,13 @@ from io import BytesIO
 from pathlib import Path
 
 from docx import Document
+from docx.shared import Cm
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 _DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 TEMPLATE_PATH = _DATA_DIR / "msa_template.docx"
 DISCOVERY_TEMPLATE_PATH = _DATA_DIR / "msa_discovery_template.docx"
+LOGO_PATH = _DATA_DIR / "noh_logo.png"
 
 
 def _generate_reference(patient_name: str, id_number: str) -> str:
@@ -59,7 +62,19 @@ def generate_msa_docx(
     """
     doc = Document(str(TEMPLATE_PATH))
 
-    # Table 0 is the letterhead — skip
+    # Table 0 — letterhead: replace existing logo with NOH colour logo
+    logo_cell = doc.tables[0].rows[0].cells[1]
+    # Clear all child elements from the cell, then add fresh paragraph with logo
+    for child in list(logo_cell._element):
+        logo_cell._element.remove(child)
+    from docx.oxml.ns import qn
+    new_p = logo_cell._element.makeelement(qn("w:p"), {})
+    logo_cell._element.append(new_p)
+    para = logo_cell.paragraphs[0]
+    para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    run = para.add_run()
+    run.add_picture(str(LOGO_PATH), width=Cm(4))
+
     # Table 1 is Client Details
     details_table = doc.tables[1]
 
@@ -127,6 +142,16 @@ def generate_discovery_msa_docx(
     Returns an in-memory DOCX buffer.
     """
     doc = Document(str(DISCOVERY_TEMPLATE_PATH))
+
+    # ------------------------------------------------------------------
+    # Logo — insert at top of document (before first paragraph)
+    # ------------------------------------------------------------------
+    first_para = doc.paragraphs[0]
+    # Insert a new paragraph before the title for the logo
+    logo_para = first_para.insert_paragraph_before("")
+    logo_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    logo_run = logo_para.add_run()
+    logo_run.add_picture(str(LOGO_PATH), width=Cm(5))
 
     # ------------------------------------------------------------------
     # Table 0 — Patient & Medical Aid Details (4-column: label, val, label, val)
