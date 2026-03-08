@@ -7,6 +7,12 @@ from engine.models import (
     NOH_PACKAGES,
     NOH_CS_CONVERSION_LEVY,
     NOH_ADDITIONAL_TESTS,
+    NOH_EPIDURAL_FEE,
+    PRIVATE_ROOM_FEE,
+)
+from engine.rules import (
+    compute_chronic_addon,
+    compute_complication_addon,
 )
 
 
@@ -64,12 +70,28 @@ class NOHCashPricingEngine:
         pkg_key = self.select_package(risk, profile.planned_delivery_mode)
         pkg = NOH_PACKAGES[pkg_key]
 
-        # 3. CS conversion levy
+        # 3. Disease-related add-ons (same logic as Discovery)
+        consult_fee = 2_300  # NOH Cash uses standard consult rate
+        scan_fee = 1_800
+        chronic_addon_amt = compute_chronic_addon(profile.chronic_flag, consult_fee, 1)
+        complication_addon_amt = compute_complication_addon(
+            profile.complication_flag, consult_fee, scan_fee, 1, 1,
+        )
+
+        # 4. CS conversion levy
         cs_levy = 0.0
         if profile.cs_conversion and profile.planned_delivery_mode == "NVD":
             cs_levy = NOH_CS_CONVERSION_LEVY
 
-        # 4. Additional tests
+        # 5. Epidural
+        epidural = NOH_EPIDURAL_FEE if profile.epidural else 0.0
+
+        # 6. Private room
+        pvt_room = 0.0
+        if profile.private_room:
+            pvt_room = PRIVATE_ROOM_FEE * (1 - profile.private_room_discount / 100)
+
+        # 7. Additional tests
         test_items = []
         total_tests = 0.0
         for test_key in profile.selected_tests:
@@ -78,10 +100,11 @@ class NOHCashPricingEngine:
                 test_items.append({"label": t["label"], "code": t["code"], "fee": t["fee"]})
                 total_tests += t["fee"]
 
-        # 5. Total
-        total = pkg["price"] + cs_levy + total_tests
+        # 8. Total
+        total = (pkg["price"] + chronic_addon_amt + complication_addon_amt
+                 + cs_levy + epidural + pvt_room + total_tests)
 
-        # 6. Payment schedule
+        # 9. Payment schedule
         monthly, months = self.compute_payment_schedule(total, profile.gestational_age_weeks)
 
         return NOHCashResult(
@@ -91,7 +114,11 @@ class NOHCashPricingEngine:
             package_price=pkg["price"],
             risk_classification=risk,
             risk_reason=reason,
+            chronic_addon=chronic_addon_amt,
+            complication_addon=complication_addon_amt,
             cs_conversion_levy=cs_levy,
+            epidural_fee=epidural,
+            private_room_addon=pvt_room,
             test_items=test_items,
             total_tests=total_tests,
             total_price=total,

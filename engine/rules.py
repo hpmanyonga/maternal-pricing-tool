@@ -54,6 +54,13 @@ def compute_cs_addon(delivery_mode, cs_differential=2000.0):
     return cs_differential if delivery_mode == "CS" else 0.0
 
 
+def compute_private_room_addon(private_room, base_fee=4000.0, discount_pct=0):
+    """Compute private room add-on with optional discount."""
+    if not private_room:
+        return 0.0
+    return base_fee * (1 - discount_pct / 100)
+
+
 def sum_addons(*addons):
     """Sum all add-on amounts."""
     return sum(addons)

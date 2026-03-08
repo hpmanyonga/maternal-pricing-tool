@@ -18,6 +18,8 @@ class PatientProfile:
     chronic_flag: bool
     complication_flag: bool
     coopland_score: Optional[int] = None
+    private_room: bool = False
+    private_room_discount: int = 0   # 0, 10, or 15 percent
 
     def validate(self):
         if self.plan_type not in VALID_PLAN_TYPES:
@@ -75,6 +77,7 @@ class PricingResult:
     chronic_addon: float
     complication_addon: float
     cs_addon: float
+    private_room_addon: float
     total_addons: float
     final_price: float
 
@@ -99,6 +102,8 @@ class PricingResult:
             items.append({"item": "Complication Add-on", "amount": self.complication_addon})
         if self.cs_addon > 0:
             items.append({"item": "CS Delivery Differential", "amount": self.cs_addon})
+        if self.private_room_addon > 0:
+            items.append({"item": "Private Room", "amount": self.private_room_addon})
         items.append({"item": "TOTAL", "amount": self.final_price})
         return items
 
@@ -117,6 +122,8 @@ NOH_PACKAGES = {
 }
 
 NOH_CS_CONVERSION_LEVY = 7_500  # MAT004
+NOH_EPIDURAL_FEE = 5_500
+PRIVATE_ROOM_FEE = 4_000  # shared across both programmes
 
 NOH_ADDITIONAL_TESTS = {
     "Path1_OGTT": {"label": "OGTT", "code": "Path1", "fee": 173.00},
@@ -134,7 +141,12 @@ class NOHCashProfile:
     gestational_age_weeks: float
     planned_delivery_mode: str        # NVD or ELECTIVE_CS
     baby_medical_aid_secured: bool
+    chronic_flag: bool = False
+    complication_flag: bool = False
     cs_conversion: bool = False       # planned NVD → emergency CS
+    epidural: bool = False
+    private_room: bool = False
+    private_room_discount: int = 0    # 0, 10, or 15 percent
     selected_tests: list = field(default_factory=list)  # keys from NOH_ADDITIONAL_TESTS
 
     @property
@@ -151,7 +163,11 @@ class NOHCashResult:
     package_price: float
     risk_classification: str          # LOW / HIGH
     risk_reason: str
+    chronic_addon: float
+    complication_addon: float
     cs_conversion_levy: float
+    epidural_fee: float
+    private_room_addon: float
     test_items: list                  # [{"label": ..., "code": ..., "fee": ...}]
     total_tests: float
     total_price: float
@@ -162,9 +178,17 @@ class NOHCashResult:
         items = [
             {"item": f"{self.package_code} — {self.package_label}", "amount": self.package_price},
         ]
+        if self.chronic_addon > 0:
+            items.append({"item": "Chronic Condition Add-on", "amount": self.chronic_addon})
+        if self.complication_addon > 0:
+            items.append({"item": "Complication Add-on", "amount": self.complication_addon})
         for t in self.test_items:
             items.append({"item": f"{t['code']}: {t['label']}", "amount": t["fee"]})
         if self.cs_conversion_levy > 0:
             items.append({"item": "MAT004 — CS Conversion Levy", "amount": self.cs_conversion_levy})
+        if self.epidural_fee > 0:
+            items.append({"item": "Epidural", "amount": self.epidural_fee})
+        if self.private_room_addon > 0:
+            items.append({"item": "Private Room", "amount": self.private_room_addon})
         items.append({"item": "TOTAL", "amount": self.total_price})
         return items

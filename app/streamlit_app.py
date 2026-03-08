@@ -10,6 +10,7 @@ from engine.models import (
     PatientProfile,
     NOHCashProfile,
     NOH_ADDITIONAL_TESTS,
+    PRIVATE_ROOM_FEE,
 )
 from engine.coopland_engine import CooplandEngine, COOPLAND_FACTORS
 from engine.eligibility_engine import EligibilityEngine
@@ -158,6 +159,19 @@ with programme_tab1:
     chronic_flag = st.sidebar.checkbox("Chronic Condition")
     complication_flag = st.sidebar.checkbox("Complications")
 
+    st.sidebar.divider()
+    st.sidebar.subheader("Room & Extras")
+    private_room = st.sidebar.checkbox("Private Room (R4,000)")
+    private_room_discount = 0
+    if private_room:
+        private_room_discount = st.sidebar.radio(
+            "Private Room Discount",
+            options=[0, 10, 15],
+            format_func=lambda x: f"No discount" if x == 0 else f"{x}% discount (R{PRIVATE_ROOM_FEE * (1 - x/100):,.0f})",
+            index=0,
+            key="disc_pvt_discount",
+        )
+
     # ==============================
     # ELIGIBILITY CHECK
     # ==============================
@@ -258,6 +272,8 @@ with programme_tab1:
             delivery_mode=delivery_mode,
             chronic_flag=chronic_flag,
             complication_flag=complication_flag,
+            private_room=private_room,
+            private_room_discount=private_room_discount,
         )
 
         result = discovery_engine.price_patient(profile)
@@ -300,6 +316,7 @@ with programme_tab1:
                 {"Add-on": "Chronic", "Amount": result.chronic_addon},
                 {"Add-on": "Complication", "Amount": result.complication_addon},
                 {"Add-on": "CS Differential", "Amount": result.cs_addon},
+                {"Add-on": "Private Room", "Amount": result.private_room_addon},
             ]
             addon_df = pd.DataFrame([a for a in addon_items if a["Amount"] > 0])
             st.dataframe(
@@ -521,6 +538,25 @@ with programme_tab2:
                 key="noh_cs_conv",
             )
 
+        # Disease-related add-ons (same as Discovery)
+        st.markdown("**Clinical Add-ons**")
+        noh_chronic = st.checkbox("Chronic Condition (+R2,300)", key="noh_chronic")
+        noh_complication = st.checkbox("Complications (+R4,100)", key="noh_complication")
+        noh_epidural = st.checkbox("Epidural (+R5,500)", key="noh_epidural")
+
+        # Private room
+        st.markdown("**Room**")
+        noh_pvt_room = st.checkbox("Private Room (R4,000)", key="noh_pvt_room")
+        noh_pvt_discount = 0
+        if noh_pvt_room:
+            noh_pvt_discount = st.radio(
+                "Private Room Discount",
+                options=[0, 10, 15],
+                format_func=lambda x: f"No discount" if x == 0 else f"{x}% (R{PRIVATE_ROOM_FEE * (1 - x/100):,.0f})",
+                index=0,
+                key="noh_pvt_discount",
+            )
+
         # Additional tests
         st.markdown("**Additional Tests**")
         selected_tests = []
@@ -539,7 +575,12 @@ with programme_tab2:
                 gestational_age_weeks=noh_ga,
                 planned_delivery_mode=noh_delivery,
                 baby_medical_aid_secured=baby_ma_secured,
+                chronic_flag=noh_chronic,
+                complication_flag=noh_complication,
                 cs_conversion=noh_cs_conversion,
+                epidural=noh_epidural,
+                private_room=noh_pvt_room,
+                private_room_discount=noh_pvt_discount,
                 selected_tests=selected_tests,
             )
 

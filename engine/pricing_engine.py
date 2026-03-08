@@ -7,6 +7,7 @@ from engine.rules import (
     compute_chronic_addon,
     compute_complication_addon,
     compute_cs_addon,
+    compute_private_room_addon,
     sum_addons,
 )
 
@@ -49,6 +50,7 @@ class PricingEngine:
 
     SCAN_FEE = 1_800
     CS_ADDON = 2_000
+    PRIVATE_ROOM_FEE = 4_000
     CHRONIC_EXTRA_CONSULTS = 1
     COMPLICATION_EXTRA_CONSULTS = 1
     COMPLICATION_EXTRA_SCANS = 1
@@ -84,8 +86,11 @@ class PricingEngine:
             self.COMPLICATION_EXTRA_CONSULTS, self.COMPLICATION_EXTRA_SCANS,
         )
         cs_addon = compute_cs_addon(profile.delivery_mode, self.CS_ADDON)
+        private_room_addon = compute_private_room_addon(
+            profile.private_room, self.PRIVATE_ROOM_FEE, profile.private_room_discount,
+        )
 
-        total_addons = sum_addons(risk_addon, chronic_addon, complication_addon, cs_addon)
+        total_addons = sum_addons(risk_addon, chronic_addon, complication_addon, cs_addon, private_room_addon)
         final_price = stages["total_global"] + total_addons
 
         return PricingResult(
@@ -100,6 +105,7 @@ class PricingEngine:
             chronic_addon=chronic_addon,
             complication_addon=complication_addon,
             cs_addon=cs_addon,
+            private_room_addon=private_room_addon,
             total_addons=total_addons,
             final_price=round(final_price, 0),
         )
