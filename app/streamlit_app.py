@@ -329,6 +329,9 @@ with programme_tab1:
         st.warning("Global fee pricing not available — patient is excluded. "
                    "This case would be billed on a fee-for-service basis.")
 
+    st.info("**Note:** Global fees do not include screening for Down's syndrome "
+            "or epidural anaesthesia. These are billed separately if requested.")
+
     # ==============================
     # FEE SCHEDULE REFERENCE
     # ==============================
@@ -538,11 +541,33 @@ with programme_tab2:
                 key="noh_cs_conv",
             )
 
-        # Disease-related add-ons (same as Discovery)
+        # Disease-related add-ons
         st.markdown("**Clinical Add-ons**")
-        noh_chronic = st.checkbox("Chronic Condition (+R2,300)", key="noh_chronic")
-        noh_complication = st.checkbox("Complications (+R4,100)", key="noh_complication")
-        noh_epidural = st.checkbox("Epidural (+R5,500)", key="noh_epidural")
+        noh_chronic = st.checkbox("Chronic Condition", key="noh_chronic")
+        noh_chronic_consults = 0
+        noh_chronic_scans = 0
+        if noh_chronic:
+            noh_chronic_consults = st.select_slider(
+                "Extra chronic consults", options=[1, 2, 3, 4],
+                value=2, key="noh_chronic_consults",
+            )
+            noh_chronic_scans = st.select_slider(
+                "Extra chronic scans (R1,500 each)", options=[1, 2],
+                value=2, key="noh_chronic_scans",
+            )
+
+        noh_complication = st.checkbox("Complications", key="noh_complication")
+        noh_comp_consults = 0
+        noh_comp_scans = 0
+        if noh_complication:
+            noh_comp_consults = st.select_slider(
+                "Extra complication consults", options=[1, 2, 3, 4],
+                value=1, key="noh_comp_consults",
+            )
+            noh_comp_scans = st.select_slider(
+                "Extra complication scans (R1,500 each)", options=[1, 2],
+                value=1, key="noh_comp_scans",
+            )
 
         # Private room
         st.markdown("**Room**")
@@ -576,9 +601,12 @@ with programme_tab2:
                 planned_delivery_mode=noh_delivery,
                 baby_medical_aid_secured=baby_ma_secured,
                 chronic_flag=noh_chronic,
+                chronic_consults=noh_chronic_consults,
+                chronic_scans=noh_chronic_scans,
                 complication_flag=noh_complication,
+                complication_consults=noh_comp_consults,
+                complication_scans=noh_comp_scans,
                 cs_conversion=noh_cs_conversion,
-                epidural=noh_epidural,
                 private_room=noh_pvt_room,
                 private_room_discount=noh_pvt_discount,
                 selected_tests=selected_tests,
@@ -603,6 +631,9 @@ with programme_tab2:
         else:
             st.divider()
             st.warning("Pricing not available — patient not eligible.")
+
+    st.info("**Note:** Package fees do not include screening for Down's syndrome "
+            "or epidural anaesthesia. These are billed separately if requested.")
 
     # ----------------------------------------------------------
     # PAYMENT GOVERNANCE (full width below columns)

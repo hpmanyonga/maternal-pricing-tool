@@ -122,7 +122,8 @@ NOH_PACKAGES = {
 }
 
 NOH_CS_CONVERSION_LEVY = 7_500  # MAT004
-NOH_EPIDURAL_FEE = 5_500
+NOH_CONSULT_FEE = 2_300
+NOH_CHRONIC_SCAN_FEE = 1_500
 PRIVATE_ROOM_FEE = 4_000  # shared across both programmes
 
 NOH_ADDITIONAL_TESTS = {
@@ -142,9 +143,12 @@ class NOHCashProfile:
     planned_delivery_mode: str        # NVD or ELECTIVE_CS
     baby_medical_aid_secured: bool
     chronic_flag: bool = False
+    chronic_consults: int = 0         # clinician chooses 1-4 (0 if no chronic)
+    chronic_scans: int = 0            # clinician chooses 1-2 (0 if no chronic)
     complication_flag: bool = False
+    complication_consults: int = 0    # clinician chooses 1-4 (0 if no complication)
+    complication_scans: int = 0       # clinician chooses 1-2 (0 if no complication)
     cs_conversion: bool = False       # planned NVD → emergency CS
-    epidural: bool = False
     private_room: bool = False
     private_room_discount: int = 0    # 0, 10, or 15 percent
     selected_tests: list = field(default_factory=list)  # keys from NOH_ADDITIONAL_TESTS
@@ -166,7 +170,6 @@ class NOHCashResult:
     chronic_addon: float
     complication_addon: float
     cs_conversion_levy: float
-    epidural_fee: float
     private_room_addon: float
     test_items: list                  # [{"label": ..., "code": ..., "fee": ...}]
     total_tests: float
@@ -186,8 +189,6 @@ class NOHCashResult:
             items.append({"item": f"{t['code']}: {t['label']}", "amount": t["fee"]})
         if self.cs_conversion_levy > 0:
             items.append({"item": "MAT004 — CS Conversion Levy", "amount": self.cs_conversion_levy})
-        if self.epidural_fee > 0:
-            items.append({"item": "Epidural", "amount": self.epidural_fee})
         if self.private_room_addon > 0:
             items.append({"item": "Private Room", "amount": self.private_room_addon})
         items.append({"item": "TOTAL", "amount": self.total_price})
