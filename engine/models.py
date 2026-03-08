@@ -101,3 +101,70 @@ class PricingResult:
             items.append({"item": "CS Delivery Differential", "amount": self.cs_addon})
         items.append({"item": "TOTAL", "amount": self.final_price})
         return items
+
+
+# ============================================================
+# NOH Cash Programme models
+# ============================================================
+
+VALID_NOH_DELIVERY_MODES = ("NVD", "ELECTIVE_CS")
+
+NOH_PACKAGES = {
+    "Mat001_LOW": {"code": "Mat001", "label": "NVD (multiparous, low-risk)", "price": 29_900},
+    "Mat001_HIGH": {"code": "Mat001", "label": "NVD (high-risk / primigravida)", "price": 46_000},
+    "Mat002": {"code": "Mat002", "label": "Elective C/S", "price": 58_650},
+    "Mat003": {"code": "Mat003", "label": "High Risk C/S", "price": 64_000},
+}
+
+NOH_CS_CONVERSION_LEVY = 7_500  # MAT004
+
+NOH_ADDITIONAL_TESTS = {
+    "Path1_OGTT": {"label": "OGTT", "code": "Path1", "fee": 173.00},
+    "Path2_HIV_CD4": {"label": "HIV CD4 & Viral Load", "code": "Path2", "fee": 1_253.50},
+    "Iron_Studies": {"label": "Iron Studies", "code": "Iron", "fee": 402.50},
+    "Mat010_NST": {"label": "Non Stress Test", "code": "Mat010", "fee": 250.00},
+}
+
+
+@dataclass
+class NOHCashProfile:
+    """Input for NOH Cash Programme pricing."""
+    gravida: int
+    parity: int
+    gestational_age_weeks: float
+    planned_delivery_mode: str        # NVD or ELECTIVE_CS
+    baby_medical_aid_secured: bool
+    cs_conversion: bool = False       # planned NVD → emergency CS
+    selected_tests: list = field(default_factory=list)  # keys from NOH_ADDITIONAL_TESTS
+
+    @property
+    def is_primigravida(self) -> bool:
+        return self.gravida == 1
+
+
+@dataclass
+class NOHCashResult:
+    """Output from NOH Cash Programme pricing."""
+    package_key: str
+    package_code: str
+    package_label: str
+    package_price: float
+    risk_classification: str          # LOW / HIGH
+    risk_reason: str
+    cs_conversion_levy: float
+    test_items: list                  # [{"label": ..., "code": ..., "fee": ...}]
+    total_tests: float
+    total_price: float
+    monthly_payment: float
+    months_to_34_weeks: int
+
+    def to_line_items(self) -> list:
+        items = [
+            {"item": f"{self.package_code} — {self.package_label}", "amount": self.package_price},
+        ]
+        for t in self.test_items:
+            items.append({"item": f"{t['code']}: {t['label']}", "amount": t["fee"]})
+        if self.cs_conversion_levy > 0:
+            items.append({"item": "MAT004 — CS Conversion Levy", "amount": self.cs_conversion_levy})
+        items.append({"item": "TOTAL", "amount": self.total_price})
+        return items
