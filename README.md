@@ -97,6 +97,21 @@ If you require database writes for quotes/audits, enforce it:
 export NETWORK_ONE_DB_REQUIRED='true'
 ```
 
+JWT/OIDC-ready auth (optional, replaces static token map when enabled):
+
+```bash
+# HS256 shared-secret mode (simple)
+export NETWORK_ONE_JWT_SECRET='replace-with-strong-secret'
+export NETWORK_ONE_JWT_ALGORITHM='HS256'
+export NETWORK_ONE_JWT_ROLES_CLAIM='roles'
+export NETWORK_ONE_JWT_ACTOR_CLAIM='sub'
+
+# Or OIDC JWKS mode
+# export NETWORK_ONE_JWKS_URL='https://issuer/.well-known/jwks.json'
+# export NETWORK_ONE_JWT_ISSUER='https://issuer/'
+# export NETWORK_ONE_JWT_AUDIENCE='network-one-pricing-api'
+```
+
 Supabase-compatible DB env options (choose one):
 
 ```bash

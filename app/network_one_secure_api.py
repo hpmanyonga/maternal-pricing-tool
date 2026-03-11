@@ -4,9 +4,11 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+import jwt
+from jwt import InvalidTokenError, PyJWKClient
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -52,6 +54,60 @@ def _load_tokens() -> Dict[str, dict]:
         return {}
 
 
+def _jwt_auth_settings() -> Dict[str, str]:
+    return {
+        "jwks_url": os.getenv("NETWORK_ONE_JWKS_URL", "").strip(),
+        "secret": os.getenv("NETWORK_ONE_JWT_SECRET", "").strip(),
+        "algorithm": os.getenv("NETWORK_ONE_JWT_ALGORITHM", "HS256").strip(),
+        "issuer": os.getenv("NETWORK_ONE_JWT_ISSUER", "").strip(),
+        "audience": os.getenv("NETWORK_ONE_JWT_AUDIENCE", "").strip(),
+        "roles_claim": os.getenv("NETWORK_ONE_JWT_ROLES_CLAIM", "roles").strip(),
+        "actor_claim": os.getenv("NETWORK_ONE_JWT_ACTOR_CLAIM", "sub").strip(),
+    }
+
+
+def _jwt_auth_enabled() -> bool:
+    cfg = _jwt_auth_settings()
+    return bool(cfg["jwks_url"] or cfg["secret"])
+
+
+def _extract_roles_from_claims(payload: Dict, roles_claim: str) -> list:
+    roles = []
+    rc = payload.get(roles_claim)
+    if isinstance(rc, str):
+        roles.extend([r.strip() for r in rc.replace(",", " ").split() if r.strip()])
+    elif isinstance(rc, list):
+        roles.extend([str(r).strip() for r in rc if str(r).strip()])
+
+    scope = payload.get("scope")
+    if isinstance(scope, str):
+        roles.extend([s.strip() for s in scope.split() if s.strip()])
+    return sorted(set(roles))
+
+
+def _verify_jwt(token: str) -> Tuple[str, list]:
+    cfg = _jwt_auth_settings()
+    decode_kwargs = {
+        "algorithms": [cfg["algorithm"]],
+    }
+    if cfg["issuer"]:
+        decode_kwargs["issuer"] = cfg["issuer"]
+    if cfg["audience"]:
+        decode_kwargs["audience"] = cfg["audience"]
+
+    if cfg["jwks_url"]:
+        signing_key = PyJWKClient(cfg["jwks_url"]).get_signing_key_from_jwt(token).key
+        payload = jwt.decode(token, signing_key, **decode_kwargs)
+    elif cfg["secret"]:
+        payload = jwt.decode(token, cfg["secret"], **decode_kwargs)
+    else:
+        raise InvalidTokenError("JWT auth not configured")
+
+    roles = _extract_roles_from_claims(payload, cfg["roles_claim"])
+    actor = str(payload.get(cfg["actor_claim"], payload.get("sub", "unknown")))
+    return actor, roles
+
+
 def _hash_patient_id(patient_id: str) -> str:
     salt = os.getenv("NETWORK_ONE_AUDIT_SALT", "dev-salt-change-me")
     digest = hmac.new(salt.encode("utf-8"), patient_id.encode("utf-8"), hashlib.sha256).hexdigest()
@@ -89,6 +145,15 @@ def _require_role(authorization: Optional[str], required_role: str) -> str:
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
     token = authorization.replace("Bearer ", "", 1).strip()
+    if _jwt_auth_enabled():
+        try:
+            actor, roles = _verify_jwt(token)
+        except InvalidTokenError:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized")
+        if required_role not in roles:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+        return actor
+
     token_map = _load_tokens()
     entry = token_map.get(token)
     if not entry:

@@ -2,6 +2,7 @@ import os
 import unittest
 
 from fastapi.testclient import TestClient
+import jwt
 
 os.environ["NETWORK_ONE_AUDIT_SALT"] = "unit-test-salt"
 os.environ["NETWORK_ONE_API_TOKENS_JSON"] = (
@@ -76,6 +77,34 @@ class NetworkOneAPITests(unittest.TestCase):
         body = response.json()
         self.assertGreater(body["complexity_score"], 0)
         self.assertIn("icd10_inferred_indicators", body["rationale"])
+
+    def test_jwt_auth_health_and_quote(self):
+        os.environ["NETWORK_ONE_JWT_SECRET"] = "unit-test-jwt-secret-minimum-32-bytes"
+        try:
+            token = jwt.encode(
+                {
+                    "sub": "jwt-user",
+                    "roles": ["quote:read", "quote:write"],
+                },
+                "unit-test-jwt-secret-minimum-32-bytes",
+                algorithm="HS256",
+            )
+            health = self.client.get("/health", headers={"Authorization": f"Bearer {token}"})
+            self.assertEqual(health.status_code, 200)
+
+            payload = {
+                "patient_id": "Mother 300",
+                "payer_type": "MEDICAL_AID",
+                "delivery_type": "NVD",
+            }
+            quote = self.client.post(
+                "/v1/episodes/quote",
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            self.assertEqual(quote.status_code, 200)
+        finally:
+            os.environ.pop("NETWORK_ONE_JWT_SECRET", None)
 
     def test_icd10_explain_requires_auth(self):
         response = self.client.post("/v1/episodes/icd10-explain", json={})
