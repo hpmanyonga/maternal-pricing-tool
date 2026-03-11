@@ -46,8 +46,8 @@ def _get_storage() -> Optional[NetworkOneStorage]:
     return NetworkOneStorage(database_url=database_url)
 
 
-contact_phone = _secret_or_default("NOH_CONTACT_PHONE", "+27 11 000 0000")
-contact_email = _secret_or_default("NOH_CONTACT_EMAIL", "hello@networkonehealth.co.za")
+contact_phone = _secret_or_default("NOH_CONTACT_PHONE", "011 458 2497")
+contact_email = _secret_or_default("NOH_CONTACT_EMAIL", "Info@networkonehealth.co.za")
 
 head_left, head_right = st.columns([1.4, 0.6], gap="large")
 with head_left:
