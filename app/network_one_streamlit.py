@@ -10,8 +10,18 @@ from engine.network_one_pricing import NetworkOneEpisodePricingEngine
 
 
 st.set_page_config(page_title="NOH QuickQuote", page_icon="🤰", layout="wide")
-st.title("NOH QuickQuote")
-st.caption("Get a rough estimate for your maternity care in under a minute.")
+
+logo_path = Path(__file__).resolve().parent.parent / "data" / "noh_logo.png"
+contact_phone = st.secrets.get("NOH_CONTACT_PHONE", "+27 11 000 0000") if hasattr(st, "secrets") else "+27 11 000 0000"
+contact_email = st.secrets.get("NOH_CONTACT_EMAIL", "hello@networkonehealth.co.za") if hasattr(st, "secrets") else "hello@networkonehealth.co.za"
+
+head_left, head_right = st.columns([1.4, 0.6], gap="large")
+with head_left:
+    st.title("NOH QuickQuote")
+    st.caption("Get a rough estimate for your maternity care in under a minute.")
+with head_right:
+    if logo_path.exists():
+        st.image(str(logo_path), width=130)
 
 st.markdown(
     """
@@ -91,19 +101,19 @@ with left_col:
         st.write("Gestational diabetes, gestational hypertension, severe vomiting")
 
     pregnancy_anatomical = st.toggle("Pregnancy-related anatomical problems")
-    with st.expander("Examples ", expanded=False):
+    with st.expander("Examples", expanded=False):
         st.write("Placenta previa, vasa previa, fibroids in pregnancy")
 
     risk_factor = st.toggle("Important risk factors")
-    with st.expander("Examples  ", expanded=False):
+    with st.expander("Examples", expanded=False):
         st.write("First pregnancy, obesity, previous caesarean, previous stillbirth/premature baby")
 
     unrelated_medical = st.toggle("Other medical conditions")
-    with st.expander("Examples   ", expanded=False):
+    with st.expander("Examples", expanded=False):
         st.write("Any non-pregnancy medical condition")
 
     unrelated_anatomical = st.toggle("Other anatomical conditions")
-    with st.expander("Examples    ", expanded=False):
+    with st.expander("Examples", expanded=False):
         st.write("Any non-pregnancy anatomical issue")
 
 
@@ -156,7 +166,22 @@ uncertainty = min(uncertainty, 0.20)
 estimate_mid = quote.final_price_zar
 estimate_low = _round_to_100(estimate_mid * (1 - uncertainty))
 estimate_high = _round_to_100(estimate_mid * (1 + uncertainty))
-monthly_from = _round_to_100(estimate_mid / 12.0)
+
+if payer_type == "CASH":
+    if timing_ui == "Planning pregnancy" or gestation_group == "Under 12 weeks":
+        n_payments = 7
+    elif gestation_group == "12 to 20 weeks":
+        n_payments = 6
+    elif gestation_group == "20 to 28 weeks":
+        n_payments = 5
+    else:
+        n_payments = 4
+    installment_low = _round_to_100(estimate_low / n_payments)
+    installment_high = _round_to_100(estimate_high / n_payments)
+else:
+    n_payments = 0
+    installment_low = 0
+    installment_high = 0
 
 tier_label_map = {
     "TIER_1_LOW": "Lower-complexity maternity estimate",
@@ -200,12 +225,57 @@ with right_col:
     st.write("- Delivery care")
     st.write("- Early postnatal care")
     st.write("")
-    st.write(f"Possible from **R {monthly_from:,.0f} per month**")
-    if st.button("Request my exact quote", type="primary", use_container_width=True):
-        st.success("Thanks. A care team member can now contact you for a personalised quote.")
+    if payer_type == "CASH":
+        st.write(
+            f"Estimated cash plan: **{n_payments} payments** of about "
+            f"**R {installment_low:,.0f} to R {installment_high:,.0f}** "
+            f"(depends on booking timing)."
+        )
+    st.write("")
+    st.info(
+        "Complication and add-on amounts are rough estimates for additional visits and tests. "
+        "Estimate excludes special tests such as Down's screening and other non-routine investigations."
+    )
     st.markdown("</div>", unsafe_allow_html=True)
 
-with st.expander("What affects this estimate?"):
-    st.write(
-        "The estimate changes based on payer type, delivery plan, pregnancy stage, and selected health factors."
-    )
+tab_estimate, tab_request = st.tabs(["Estimate details", "Request my quote"])
+
+with tab_estimate:
+    with st.expander("What affects this estimate?"):
+        st.write(
+            "The estimate changes based on payer type, delivery plan, pregnancy stage, and selected health factors."
+        )
+    with st.expander("FFS vs Global Fees (quick explainer)"):
+        st.write(
+            "**Fee-for-service (FFS):** each visit, test, and procedure is billed separately. "
+            "Final costs can vary more."
+        )
+        st.write(
+            "**Global fee:** one bundled maternity fee for a defined episode of care. "
+            "Costs are more predictable, with add-ons for complexity."
+        )
+
+with tab_request:
+    st.subheader("Request my exact quote")
+    st.caption("Share your details and our team will contact you.")
+    with st.form("quote_request_form", clear_on_submit=False):
+        r1, r2 = st.columns(2)
+        with r1:
+            full_name = st.text_input("Full name")
+            mobile = st.text_input("Mobile number")
+        with r2:
+            email = st.text_input("Email address")
+            preferred_contact = st.selectbox("Preferred contact method", ["Phone call", "WhatsApp", "Email"])
+        notes = st.text_area("Any notes for the care team (optional)")
+        submitted = st.form_submit_button("Submit my quote request", type="primary")
+        if submitted:
+            if not full_name.strip() or not mobile.strip():
+                st.error("Please add your name and mobile number so we can contact you.")
+            else:
+                st.success("Thanks. Your request is ready for follow-up by the NOH team.")
+                st.write(
+                    f"Contact preference: **{preferred_contact}** | "
+                    f"Estimate range: **R {estimate_low:,.0f} to R {estimate_high:,.0f}**"
+                )
+
+st.caption(f"Need help now? Contact us: {contact_phone} | {contact_email}")
