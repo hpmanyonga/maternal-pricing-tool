@@ -18,6 +18,7 @@ from engine.noh_cash_eligibility import NOHCashEligibilityEngine
 from engine.noh_cash_engine import NOHCashPricingEngine
 from engine.hrantn_document import generate_hrantn_pdf
 from engine.msa_document import generate_msa_docx, generate_discovery_msa_docx
+from auth import require_auth
 import tempfile
 
 OUTPUTS_DIR = Path(__file__).resolve().parent.parent / "outputs"
@@ -30,6 +31,9 @@ st.set_page_config(
     page_icon="🏥",
     layout="wide",
 )
+
+if not require_auth():
+    st.stop()
 
 st.title("Maternal Care Pricing Tool")
 
