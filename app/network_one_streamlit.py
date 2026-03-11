@@ -5,135 +5,207 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from engine.network_one_icd10 import explain_icd10_matches
 from engine.network_one_models import NetworkOneEpisodeInput
 from engine.network_one_pricing import NetworkOneEpisodePricingEngine
 
 
-st.set_page_config(page_title="Network One Episode Pricing", page_icon="🏥", layout="centered")
-st.title("Network One Episode Pricing")
-st.caption("Early ANC to Early PNC (including delivery)")
+st.set_page_config(page_title="NOH QuickQuote", page_icon="🤰", layout="wide")
+st.title("NOH QuickQuote")
+st.caption("Get a rough estimate for your maternity care in under a minute.")
+
+st.markdown(
+    """
+    <style>
+      .stApp {
+        background: radial-gradient(circle at top right, #eef7ff 0%, #ffffff 35%, #ffffff 100%);
+      }
+      .noh-card {
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 18px 20px;
+        background: #ffffff;
+        box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
+      }
+      .noh-kicker {
+        font-size: 0.85rem;
+        color: #486581;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      .noh-price {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #102a43;
+        line-height: 1.15;
+        margin: 0.2rem 0 0.4rem 0;
+      }
+      .noh-note {
+        color: #486581;
+        font-size: 0.92rem;
+      }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 engine = NetworkOneEpisodePricingEngine()
 config = engine.config
 
-patient_id = st.text_input("Patient ID", value="Mother 100")
-payer_type = st.selectbox("Payer Type", options=["MEDICAL_AID", "CASH"])
-delivery_type = st.selectbox("Delivery Type", options=["UNKNOWN", "NVD", "CS"])
+left_col, right_col = st.columns([1.25, 1], gap="large")
 
-st.subheader("Complexity Indicators")
-chronic = st.checkbox("Chronic")
-pregnancy_medical = st.checkbox("Pregnancy medical")
-pregnancy_anatomical = st.checkbox("Pregnancy anatomical")
-risk_factor = st.checkbox("Risk factor")
-unrelated_medical = st.checkbox("Unrelated medical")
-unrelated_anatomical = st.checkbox("Unrelated anatomical")
+with left_col:
+    st.subheader("Your Estimate Inputs")
+    payer_ui = st.segmented_control(
+        "How are you paying?",
+        options=["Medical aid", "Cash"],
+        default="Medical aid",
+    )
+    delivery_ui = st.segmented_control(
+        "Planned delivery type",
+        options=["Vaginal birth", "Caesarean birth", "Not sure yet"],
+        default="Not sure yet",
+    )
+    timing_ui = st.segmented_control(
+        "Timing",
+        options=["Planning pregnancy", "Pregnant now"],
+        default="Pregnant now",
+    )
 
-base_price_zar = st.number_input(
-    "Base price (ZAR)",
-    min_value=1.0,
-    value=float(config["base_price_zar"]),
-    step=500.0,
-)
-
-icd10_codes_text = st.text_area(
-    "ICD10 Codes (comma or newline separated)",
-    value="",
-)
-icd10_descriptions_text = st.text_area(
-    "ICD10 Descriptions (one per line)",
-    value="",
-)
-st.caption("ICD10 fields are optional. Leave blank to price from manual indicators only.")
-
-
-def _parse_lines(raw: str):
-    items = []
-    for part in raw.replace(",", "\n").splitlines():
-        cleaned = part.strip()
-        if cleaned:
-            items.append(cleaned)
-    return items
-
-
-parsed_codes = _parse_lines(icd10_codes_text)
-parsed_desc = _parse_lines(icd10_descriptions_text)
-
-quote_tab, explain_tab = st.tabs(["Quote", "Explain ICD10"])
-
-with quote_tab:
-    if st.button("Generate Quote"):
-        profile = NetworkOneEpisodeInput(
-            patient_id=patient_id,
-            payer_type=payer_type,
-            delivery_type=delivery_type,
-            chronic=chronic,
-            pregnancy_medical=pregnancy_medical,
-            pregnancy_anatomical=pregnancy_anatomical,
-            risk_factor=risk_factor,
-            unrelated_medical=unrelated_medical,
-            unrelated_anatomical=unrelated_anatomical,
-            icd10_codes=parsed_codes,
-            icd10_descriptions=parsed_desc,
-            base_price_zar=base_price_zar,
-            installment_weights=config["installment_weights"],
+    gestation_group = "Under 12 weeks"
+    if timing_ui == "Pregnant now":
+        gestation_group = st.select_slider(
+            "How far along are you?",
+            options=["Under 12 weeks", "12 to 20 weeks", "20 to 28 weeks", "28+ weeks"],
+            value="Under 12 weeks",
         )
-        quote = engine.quote(profile)
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Complexity Score", f"{quote.complexity_score:.1f}")
-        col2.metric("Tier", quote.complexity_tier.replace("_", " "))
-        col3.metric("Final Price", f"R {quote.final_price_zar:,.2f}")
+    st.subheader("Health factors that affect price")
+    st.caption("Select any that apply.")
 
-        st.subheader("Installments")
-        for stage, amount in quote.installment_amounts.items():
-            st.write(f"- {stage}: R {amount:,.2f}")
+    chronic = st.toggle("Long-term health conditions")
+    with st.expander("Examples"):
+        st.write("HIV, diabetes, thyroid disease, epilepsy, hypertension")
 
-        st.subheader("Clinical Cost Buckets")
-        for bucket, amount in quote.clinical_bucket_amounts.items():
-            share = (amount / quote.final_price_zar) * 100 if quote.final_price_zar else 0
-            st.write(f"- {bucket}: R {amount:,.2f} ({share:.1f}%)")
+    pregnancy_medical = st.toggle("Pregnancy-related medical problems")
+    with st.expander("Examples", expanded=False):
+        st.write("Gestational diabetes, gestational hypertension, severe vomiting")
 
-        st.subheader("Rationale")
-        st.json(quote.rationale)
+    pregnancy_anatomical = st.toggle("Pregnancy-related anatomical problems")
+    with st.expander("Examples ", expanded=False):
+        st.write("Placenta previa, vasa previa, fibroids in pregnancy")
 
-with explain_tab:
-    if st.button("Explain ICD10"):
-        explanation = explain_icd10_matches(
-            codes=parsed_codes,
-            descriptions=parsed_desc,
-        )
-        preview_profile = NetworkOneEpisodeInput(
-            patient_id=patient_id or "EXPLAIN_PREVIEW",
-            payer_type=payer_type,
-            delivery_type=delivery_type,
-            chronic=chronic,
-            pregnancy_medical=pregnancy_medical,
-            pregnancy_anatomical=pregnancy_anatomical,
-            risk_factor=risk_factor,
-            unrelated_medical=unrelated_medical,
-            unrelated_anatomical=unrelated_anatomical,
-            icd10_codes=parsed_codes,
-            icd10_descriptions=parsed_desc,
-            base_price_zar=base_price_zar,
-            installment_weights=config["installment_weights"],
-        )
-        preview_quote = engine.quote(preview_profile)
+    risk_factor = st.toggle("Important risk factors")
+    with st.expander("Examples  ", expanded=False):
+        st.write("First pregnancy, obesity, previous caesarean, previous stillbirth/premature baby")
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Preview Score", f"{preview_quote.complexity_score:.1f}")
-        col2.metric("Preview Tier", preview_quote.complexity_tier.replace("_", " "))
-        col3.metric("Preview Price", f"R {preview_quote.final_price_zar:,.2f}")
+    unrelated_medical = st.toggle("Other medical conditions")
+    with st.expander("Examples   ", expanded=False):
+        st.write("Any non-pregnancy medical condition")
 
-        st.subheader("Inferred Indicators")
-        st.write(", ".join(explanation["inferred_indicators"]) or "None")
+    unrelated_anatomical = st.toggle("Other anatomical conditions")
+    with st.expander("Examples    ", expanded=False):
+        st.write("Any non-pregnancy anatomical issue")
 
-        st.subheader("Code Matches")
-        st.json(explanation["code_matches"])
 
-        st.subheader("Description Matches")
-        st.json(explanation["description_matches"])
+def _round_to_100(value: float) -> int:
+    return int(round(value / 100.0) * 100)
 
-        with st.expander("Match Trace"):
-            for line in explanation["trace"]:
-                st.write(f"- {line}")
+
+payer_map = {"Medical aid": "MEDICAL_AID", "Cash": "CASH"}
+delivery_map = {"Vaginal birth": "NVD", "Caesarean birth": "CS", "Not sure yet": "UNKNOWN"}
+payer_factor = {"MEDICAL_AID": 1.0, "CASH": 0.94}
+timing_factor = {
+    "Planning pregnancy": 0.98,
+    "Under 12 weeks": 1.00,
+    "12 to 20 weeks": 1.03,
+    "20 to 28 weeks": 1.07,
+    "28+ weeks": 1.12,
+}
+
+payer_type = payer_map[payer_ui]
+delivery_type = delivery_map[delivery_ui]
+base_anchor = float(config["base_price_zar"])
+base_price_zar = base_anchor * payer_factor[payer_type] * timing_factor.get(gestation_group, 1.0)
+
+profile = NetworkOneEpisodeInput(
+    patient_id="PUBLIC_QUICKQUOTE",
+    payer_type=payer_type,
+    delivery_type=delivery_type,
+    chronic=chronic,
+    pregnancy_medical=pregnancy_medical,
+    pregnancy_anatomical=pregnancy_anatomical,
+    risk_factor=risk_factor,
+    unrelated_medical=unrelated_medical,
+    unrelated_anatomical=unrelated_anatomical,
+    base_price_zar=base_price_zar,
+    installment_weights=config["installment_weights"],
+)
+quote = engine.quote(profile)
+
+active_factors = sum(
+    [chronic, pregnancy_medical, pregnancy_anatomical, risk_factor, unrelated_medical, unrelated_anatomical]
+)
+uncertainty = 0.08
+if delivery_type == "UNKNOWN":
+    uncertainty += 0.05
+if gestation_group in ("20 to 28 weeks", "28+ weeks"):
+    uncertainty += 0.03
+uncertainty += min(active_factors * 0.01, 0.05)
+uncertainty = min(uncertainty, 0.20)
+
+estimate_mid = quote.final_price_zar
+estimate_low = _round_to_100(estimate_mid * (1 - uncertainty))
+estimate_high = _round_to_100(estimate_mid * (1 + uncertainty))
+monthly_from = _round_to_100(estimate_mid / 12.0)
+
+tier_label_map = {
+    "TIER_1_LOW": "Lower-complexity maternity estimate",
+    "TIER_2_MODERATE": "Standard-complexity maternity estimate",
+    "TIER_3_HIGH": "Higher-complexity maternity estimate",
+    "TIER_4_VERY_HIGH": "High-support maternity estimate",
+}
+likely_category = tier_label_map.get(quote.complexity_tier, "Maternity estimate")
+
+price_drivers = []
+if delivery_type == "CS":
+    price_drivers.append("Caesarean delivery")
+elif delivery_type == "UNKNOWN":
+    price_drivers.append("Delivery method still undecided")
+if timing_ui == "Pregnant now" and gestation_group in ("20 to 28 weeks", "28+ weeks"):
+    price_drivers.append("Later pregnancy stage")
+if active_factors > 0:
+    price_drivers.append("Health risk factors selected")
+if not price_drivers:
+    price_drivers.append("Standard maternity pathway")
+
+with right_col:
+    st.markdown('<div class="noh-card">', unsafe_allow_html=True)
+    st.markdown('<div class="noh-kicker">Estimated Price</div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="noh-price">R {estimate_low:,.0f} to R {estimate_high:,.0f}</div>',
+        unsafe_allow_html=True,
+    )
+    st.write(f"**Likely category:** {likely_category}")
+    st.markdown(
+        '<div class="noh-note">Based on your answers. Final quote follows clinical review.</div>',
+        unsafe_allow_html=True,
+    )
+    st.write("")
+    st.write("**What usually pushes price up**")
+    for item in price_drivers:
+        st.write(f"- {item}")
+    st.write("")
+    st.write("**Typical inclusions**")
+    st.write("- Antenatal care")
+    st.write("- Delivery care")
+    st.write("- Early postnatal care")
+    st.write("")
+    st.write(f"Possible from **R {monthly_from:,.0f} per month**")
+    if st.button("Request my exact quote", type="primary", use_container_width=True):
+        st.success("Thanks. A care team member can now contact you for a personalised quote.")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+with st.expander("What affects this estimate?"):
+    st.write(
+        "The estimate changes based on payer type, delivery plan, pregnancy stage, and selected health factors."
+    )
