@@ -68,3 +68,84 @@ maternal-pricing-tool/
 │   └── streamlit_app.py           # Dashboard
 └── README.md
 ```
+
+## Network One Episode Pricing (Secure v1)
+
+Risk-rated pricing for the episode from early ANC to early PNC (including delivery), with secure API scaffolding.
+
+### Run tests
+
+```bash
+python -m unittest discover -s tests
+```
+
+### Run secure API
+
+```bash
+export NETWORK_ONE_AUDIT_SALT='replace-with-random-secret'
+export NETWORK_ONE_API_TOKENS_JSON='{"demo-writer":{"actor":"pricing-admin","roles":["quote:read","quote:write"]},"demo-reader":{"actor":"auditor","roles":["quote:read"]}}'
+export NETWORK_ONE_DATABASE_URL='postgresql://user:pass@localhost:5432/network_one_pricing'
+python scripts/migrate_postgres.py
+uvicorn app.network_one_secure_api:app --host 0.0.0.0 --port 8000
+```
+
+API docs: `http://localhost:8000/docs`
+
+If you require database writes for quotes/audits, enforce it:
+
+```bash
+export NETWORK_ONE_DB_REQUIRED='true'
+```
+
+Supabase-compatible DB env options (choose one):
+
+```bash
+# Option A: direct
+export SUPABASE_DB_URL='postgresql://postgres.<project-ref>:<password>@<pooler-host>:6543/postgres?sslmode=require'
+
+# Option B: derived from standard Supabase URL
+export SUPABASE_URL='https://<project-ref>.supabase.co'
+export SUPABASE_DB_PASSWORD='<db-password>'
+# optional overrides:
+# export SUPABASE_DB_USER='postgres'
+# export SUPABASE_DB_NAME='postgres'
+# export SUPABASE_POOLER_PORT='6543'
+# export SUPABASE_SSLMODE='require'
+```
+
+Detailed approach and governance notes:
+- `docs/network_one_episode_pricing_approach.md`
+
+### Run Network One Streamlit screen
+
+```bash
+streamlit run app/network_one_streamlit.py
+```
+
+### Run CLI quote
+
+```bash
+python scripts/quote_network_one.py --input data/network_one_sample_quote_input.json
+```
+
+The quote payload can include:
+- `icd10_codes` (e.g. `["O14.1","I10"]`)
+- `icd10_descriptions` (free-text diagnosis descriptions)
+
+New API endpoint:
+- `POST /v1/episodes/icd10-explain`
+  Returns ICD10-to-indicator match details and a preview complexity tier/price.
+
+Streamlit now includes an `Explain ICD10` tab with:
+- code and description matching
+- inferred indicators
+- preview score/tier/price
+
+Clinical cost buckets are now explicitly surfaced in outputs:
+- `early_anc`
+- `mid_anc`
+- `delivery_admission_and_specialist`
+- `early_pnc`
+
+Default proportions are calibrated from your funder dataset period split, with delivery as the dominant cost locus.
+Delivery bucket floors are also enforced by mode (configurable) to prevent implausibly low delivery-period amounts.
