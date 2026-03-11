@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import streamlit as st
+from streamlit.errors import StreamlitSecretNotFoundError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -12,8 +13,17 @@ from engine.network_one_pricing import NetworkOneEpisodePricingEngine
 st.set_page_config(page_title="NOH QuickQuote", page_icon="🤰", layout="wide")
 
 logo_path = Path(__file__).resolve().parent.parent / "data" / "noh_logo.png"
-contact_phone = st.secrets.get("NOH_CONTACT_PHONE", "+27 11 000 0000") if hasattr(st, "secrets") else "+27 11 000 0000"
-contact_email = st.secrets.get("NOH_CONTACT_EMAIL", "hello@networkonehealth.co.za") if hasattr(st, "secrets") else "hello@networkonehealth.co.za"
+
+
+def _secret_or_default(key: str, default: str) -> str:
+    try:
+        return st.secrets.get(key, default)
+    except StreamlitSecretNotFoundError:
+        return default
+
+
+contact_phone = _secret_or_default("NOH_CONTACT_PHONE", "+27 11 000 0000")
+contact_email = _secret_or_default("NOH_CONTACT_EMAIL", "hello@networkonehealth.co.za")
 
 head_left, head_right = st.columns([1.4, 0.6], gap="large")
 with head_left:
