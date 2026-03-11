@@ -62,6 +62,30 @@ class AuditLogRecord(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
 
 
+class QuoteRequestRecord(Base):
+    __tablename__ = "quote_requests"
+
+    id = Column(String(36), primary_key=True)
+    quote_id = Column(String(36), ForeignKey("episode_quotes.id"), nullable=True, index=True)
+    full_name = Column(String(160), nullable=False)
+    mobile = Column(String(32), nullable=False, index=True)
+    email = Column(String(160), nullable=True, index=True)
+    preferred_contact = Column(String(32), nullable=False)
+    notes = Column(String(1024), nullable=True)
+    payer_type = Column(String(32), nullable=False)
+    delivery_type = Column(String(32), nullable=False)
+    gestation_group = Column(String(32), nullable=False)
+    estimate_low_zar = Column(Float, nullable=False)
+    estimate_high_zar = Column(Float, nullable=False)
+    estimate_mid_zar = Column(Float, nullable=False)
+    installment_count = Column(Integer, nullable=True)
+    installment_low_zar = Column(Float, nullable=True)
+    installment_high_zar = Column(Float, nullable=True)
+    selected_factors = Column(JSON, nullable=False, default=list)
+    status = Column(String(32), nullable=False, default="NEW")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+
+
 def resolve_database_url() -> Optional[str]:
     # Preferred explicit overrides
     if os.getenv("NETWORK_ONE_DATABASE_URL"):
@@ -185,3 +209,88 @@ class NetworkOneStorage:
                 session.rollback()
                 raise
         return quote_id
+
+    def save_quote_request(
+        self,
+        *,
+        quote_id: Optional[str],
+        full_name: str,
+        mobile: str,
+        email: Optional[str],
+        preferred_contact: str,
+        notes: Optional[str],
+        payer_type: str,
+        delivery_type: str,
+        gestation_group: str,
+        estimate_low_zar: float,
+        estimate_high_zar: float,
+        estimate_mid_zar: float,
+        installment_count: Optional[int],
+        installment_low_zar: Optional[float],
+        installment_high_zar: Optional[float],
+        selected_factors: list[str],
+    ) -> str:
+        request_id = str(uuid.uuid4())
+        record = QuoteRequestRecord(
+            id=request_id,
+            quote_id=quote_id,
+            full_name=full_name,
+            mobile=mobile,
+            email=email,
+            preferred_contact=preferred_contact,
+            notes=notes,
+            payer_type=payer_type,
+            delivery_type=delivery_type,
+            gestation_group=gestation_group,
+            estimate_low_zar=float(estimate_low_zar),
+            estimate_high_zar=float(estimate_high_zar),
+            estimate_mid_zar=float(estimate_mid_zar),
+            installment_count=installment_count,
+            installment_low_zar=float(installment_low_zar) if installment_low_zar is not None else None,
+            installment_high_zar=float(installment_high_zar) if installment_high_zar is not None else None,
+            selected_factors=selected_factors,
+            status="NEW",
+        )
+        with self.session_factory() as session:
+            try:
+                session.add(record)
+                session.commit()
+            except SQLAlchemyError:
+                session.rollback()
+                raise
+        return request_id
+
+    def list_quote_requests(self, limit: int = 200) -> list[dict]:
+        with self.session_factory() as session:
+            rows = (
+                session.query(QuoteRequestRecord)
+                .order_by(QuoteRequestRecord.created_at.desc())
+                .limit(limit)
+                .all()
+            )
+            output = []
+            for row in rows:
+                output.append(
+                    {
+                        "id": row.id,
+                        "quote_id": row.quote_id,
+                        "full_name": row.full_name,
+                        "mobile": row.mobile,
+                        "email": row.email,
+                        "preferred_contact": row.preferred_contact,
+                        "notes": row.notes,
+                        "payer_type": row.payer_type,
+                        "delivery_type": row.delivery_type,
+                        "gestation_group": row.gestation_group,
+                        "estimate_low_zar": row.estimate_low_zar,
+                        "estimate_high_zar": row.estimate_high_zar,
+                        "estimate_mid_zar": row.estimate_mid_zar,
+                        "installment_count": row.installment_count,
+                        "installment_low_zar": row.installment_low_zar,
+                        "installment_high_zar": row.installment_high_zar,
+                        "selected_factors": row.selected_factors or [],
+                        "status": row.status,
+                        "created_at": row.created_at.isoformat() if row.created_at else None,
+                    }
+                )
+            return output

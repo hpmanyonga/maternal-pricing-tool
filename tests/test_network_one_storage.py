@@ -7,6 +7,7 @@ from engine.network_one_storage import (
     AuditLogRecord,
     InstallmentRecord,
     NetworkOneStorage,
+    QuoteRequestRecord,
     QuoteRecord,
     resolve_database_url,
 )
@@ -60,6 +61,49 @@ class NetworkOneStorageTests(unittest.TestCase):
             self.assertIsNotNone(event)
             self.assertEqual(event.actor, "pricing-admin")
             self.assertEqual(event.result, "success")
+
+    def test_save_and_list_quote_requests(self):
+        quote = self.engine.quote(
+            NetworkOneEpisodeInput(
+                patient_id="Mother 123",
+                payer_type="CASH",
+                delivery_type="UNKNOWN",
+            )
+        )
+        quote_id = self.storage.save_quote(
+            quote=quote,
+            patient_hash="hash123",
+            delivery_type="UNKNOWN",
+        )
+        request_id = self.storage.save_quote_request(
+            quote_id=quote_id,
+            full_name="Jane Doe",
+            mobile="+27821234567",
+            email="jane@example.com",
+            preferred_contact="WhatsApp",
+            notes="Please call after 5pm",
+            payer_type="CASH",
+            delivery_type="UNKNOWN",
+            gestation_group="Under 12 weeks",
+            estimate_low_zar=45000.0,
+            estimate_high_zar=52000.0,
+            estimate_mid_zar=48500.0,
+            installment_count=7,
+            installment_low_zar=6400.0,
+            installment_high_zar=7400.0,
+            selected_factors=["Long-term health conditions"],
+        )
+
+        with self.storage.session_factory() as session:
+            row = session.query(QuoteRequestRecord).filter_by(id=request_id).first()
+            self.assertIsNotNone(row)
+            self.assertEqual(row.mobile, "+27821234567")
+
+        requests = self.storage.list_quote_requests(limit=10)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["id"], request_id)
+        self.assertEqual(requests[0]["quote_id"], quote_id)
+        self.assertEqual(requests[0]["selected_factors"], ["Long-term health conditions"])
 
     def test_resolve_database_url_prefers_supabase_db_url(self):
         os.environ.pop("NETWORK_ONE_DATABASE_URL", None)

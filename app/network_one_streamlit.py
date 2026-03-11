@@ -1,13 +1,20 @@
 import sys
+import hashlib
+import hmac
+import os
 from pathlib import Path
+from typing import Optional
 
+import pandas as pd
 import streamlit as st
 from streamlit.errors import StreamlitSecretNotFoundError
+from sqlalchemy.exc import SQLAlchemyError
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from engine.network_one_models import NetworkOneEpisodeInput
 from engine.network_one_pricing import NetworkOneEpisodePricingEngine
+from engine.network_one_storage import NetworkOneStorage, resolve_database_url
 
 
 st.set_page_config(page_title="NOH QuickQuote", page_icon="🤰", layout="wide")
@@ -20,6 +27,23 @@ def _secret_or_default(key: str, default: str) -> str:
         return st.secrets.get(key, default)
     except StreamlitSecretNotFoundError:
         return default
+
+
+def _secret_or_empty(key: str) -> str:
+    return _secret_or_default(key, "")
+
+
+def _hash_identifier(value: str) -> str:
+    salt = os.getenv("NETWORK_ONE_AUDIT_SALT", _secret_or_default("NETWORK_ONE_AUDIT_SALT", "dev-salt-change-me"))
+    return hmac.new(salt.encode("utf-8"), value.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+@st.cache_resource(show_spinner=False)
+def _get_storage() -> Optional[NetworkOneStorage]:
+    database_url = resolve_database_url()
+    if not database_url:
+        return None
+    return NetworkOneStorage(database_url=database_url)
 
 
 contact_phone = _secret_or_default("NOH_CONTACT_PHONE", "+27 11 000 0000")
@@ -248,7 +272,22 @@ with right_col:
     )
     st.markdown("</div>", unsafe_allow_html=True)
 
-tab_estimate, tab_request = st.tabs(["Estimate details", "Request my quote"])
+selected_factor_labels = []
+if chronic:
+    selected_factor_labels.append("Long-term health conditions")
+if pregnancy_medical:
+    selected_factor_labels.append("Pregnancy-related medical problems")
+if pregnancy_anatomical:
+    selected_factor_labels.append("Pregnancy-related anatomical problems")
+if risk_factor:
+    selected_factor_labels.append("Important risk factors")
+if unrelated_medical:
+    selected_factor_labels.append("Other medical conditions")
+if unrelated_anatomical:
+    selected_factor_labels.append("Other anatomical conditions")
+
+
+tab_estimate, tab_request, tab_admin = st.tabs(["Estimate details", "Request my quote", "Admin leads"])
 
 with tab_estimate:
     with st.expander("What affects this estimate?"):
@@ -282,10 +321,83 @@ with tab_request:
             if not full_name.strip() or not mobile.strip():
                 st.error("Please add your name and mobile number so we can contact you.")
             else:
-                st.success("Thanks. Your request is ready for follow-up by the NOH team.")
+                storage = _get_storage()
+                if not storage:
+                    st.warning(
+                        "Quote request captured in-session, but database is not configured yet. "
+                        "Set Supabase/Postgres env vars to persist requests."
+                    )
+                    st.success("Thanks. Your request is ready for follow-up by the NOH team.")
+                else:
+                    try:
+                        patient_hash = _hash_identifier(f"{full_name.strip()}|{mobile.strip()}")
+                        quote_id = storage.save_quote(
+                            quote=quote,
+                            patient_hash=patient_hash,
+                            delivery_type=delivery_type,
+                        )
+                        request_id = storage.save_quote_request(
+                            quote_id=quote_id,
+                            full_name=full_name.strip(),
+                            mobile=mobile.strip(),
+                            email=email.strip() or None,
+                            preferred_contact=preferred_contact,
+                            notes=notes.strip() or None,
+                            payer_type=payer_type,
+                            delivery_type=delivery_type,
+                            gestation_group=gestation_group,
+                            estimate_low_zar=float(estimate_low),
+                            estimate_high_zar=float(estimate_high),
+                            estimate_mid_zar=float(estimate_mid),
+                            installment_count=n_payments if payer_type == "CASH" else None,
+                            installment_low_zar=float(installment_low) if payer_type == "CASH" else None,
+                            installment_high_zar=float(installment_high) if payer_type == "CASH" else None,
+                            selected_factors=selected_factor_labels,
+                        )
+                        storage.save_audit_event(
+                            actor="public-quickquote",
+                            action="quote_request_submitted",
+                            target_hash=patient_hash,
+                            result="success",
+                            detail=f"request_id={request_id};quote_id={quote_id}",
+                        )
+                        st.success("Thanks. Your request has been saved and sent to the NOH team.")
+                    except SQLAlchemyError:
+                        st.error("We could not save your request to the database. Please try again.")
+                        st.stop()
+
                 st.write(
                     f"Contact preference: **{preferred_contact}** | "
                     f"Estimate range: **R {estimate_low:,.0f} to R {estimate_high:,.0f}**"
                 )
+
+with tab_admin:
+    st.subheader("Lead requests")
+    st.caption("For internal use only.")
+    admin_token_expected = _secret_or_empty("NOH_ADMIN_TOKEN")
+    storage = _get_storage()
+
+    if not storage:
+        st.info("Database not configured. Set Supabase/Postgres environment variables first.")
+    elif not admin_token_expected:
+        st.info("Set `NOH_ADMIN_TOKEN` in secrets/environment to enable lead export.")
+    else:
+        token_input = st.text_input("Admin access token", type="password")
+        if token_input == admin_token_expected:
+            requests = storage.list_quote_requests(limit=500)
+            if not requests:
+                st.info("No quote requests captured yet.")
+            else:
+                df = pd.DataFrame(requests)
+                st.dataframe(df, use_container_width=True, hide_index=True)
+                st.download_button(
+                    "Download requests CSV",
+                    data=df.to_csv(index=False).encode("utf-8"),
+                    file_name="noh_quote_requests.csv",
+                    mime="text/csv",
+                    type="secondary",
+                )
+        elif token_input:
+            st.error("Invalid admin token.")
 
 st.caption(f"Need help now? Contact us: {contact_phone} | {contact_email}")

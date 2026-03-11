@@ -137,6 +137,21 @@ Detailed approach and governance notes:
 streamlit run app/network_one_streamlit.py
 ```
 
+Optional Streamlit configuration (for branding/admin):
+
+```bash
+export NOH_CONTACT_PHONE='+27 11 000 0000'
+export NOH_CONTACT_EMAIL='hello@networkonehealth.co.za'
+export NOH_ADMIN_TOKEN='replace-with-strong-admin-token'
+```
+
+The Streamlit app now persists public quote requests to DB when Supabase/Postgres env vars are configured.
+Run this migration in Supabase SQL editor (after `001_init_network_one_pricing.sql`):
+
+```sql
+-- migrations/postgres/002_quote_requests.sql
+```
+
 ### Run CLI quote
 
 ```bash
