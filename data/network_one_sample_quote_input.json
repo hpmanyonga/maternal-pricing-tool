@@ -1,0 +1,13 @@
+{
+  "patient_id": "Mother 100",
+  "payer_type": "MEDICAL_AID",
+  "delivery_type": "CS",
+  "chronic": true,
+  "pregnancy_medical": true,
+  "pregnancy_anatomical": true,
+  "risk_factor": false,
+  "unrelated_medical": true,
+  "unrelated_anatomical": false,
+  "icd10_codes": ["O14.1", "I10"],
+  "icd10_descriptions": ["Severe preeclampsia in pregnancy", "Essential hypertension"]
+}

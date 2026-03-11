@@ -1,0 +1,57 @@
+{
+  "risk_weights": {
+    "chronic": 2.0,
+    "pregnancy_medical": 2.0,
+    "pregnancy_anatomical": 1.0,
+    "risk_factor": 1.0,
+    "unrelated_medical": 0.5,
+    "unrelated_anatomical": 0.5
+  },
+  "tier_multipliers": {
+    "TIER_1_LOW": 0.88,
+    "TIER_2_MODERATE": 1.0,
+    "TIER_3_HIGH": 1.18,
+    "TIER_4_VERY_HIGH": 1.38
+  },
+  "delivery_addon": {
+    "NVD": 0.0,
+    "CS": 6000.0,
+    "UNKNOWN": 2500.0
+  },
+  "price_floor_zar": 42000.0,
+  "price_cap_zar": 85000.0,
+  "base_price_zar": 51000.0,
+  "installment_weights": {
+    "booking_12_16w": 0.12,
+    "mid_anc_20_24w": 0.18,
+    "late_anc_28_32w": 0.14,
+    "pre_delivery_34_36w": 0.05,
+    "delivery_event": 0.48,
+    "early_pnc_0_6w": 0.03
+  },
+  "clinical_bucket_proportions": {
+    "UNKNOWN": {
+      "early_anc": 0.129,
+      "mid_anc": 0.185,
+      "delivery_admission_and_specialist": 0.675,
+      "early_pnc": 0.011
+    },
+    "NVD": {
+      "early_anc": 0.129,
+      "mid_anc": 0.157,
+      "delivery_admission_and_specialist": 0.706,
+      "early_pnc": 0.009
+    },
+    "CS": {
+      "early_anc": 0.129,
+      "mid_anc": 0.199,
+      "delivery_admission_and_specialist": 0.659,
+      "early_pnc": 0.012
+    }
+  },
+  "delivery_bucket_floor_zar": {
+    "UNKNOWN": 30000.0,
+    "NVD": 28000.0,
+    "CS": 38000.0
+  }
+}
