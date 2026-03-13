@@ -4,11 +4,23 @@ from datetime import datetime, timezone
 from urllib.parse import urlparse
 from typing import Optional
 
+import streamlit as st
 from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, Integer, String, create_engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 from engine.network_one_models import NetworkOneEpisodeQuote
+
+
+def _resolve_env(key: str, default: str = "") -> str:
+    """Check st.secrets first, then os.getenv."""
+    try:
+        val = st.secrets.get(key, "")
+        if val:
+            return val
+    except Exception:
+        pass
+    return os.getenv(key, default)
 
 
 Base = declarative_base()
@@ -88,12 +100,12 @@ class QuoteRequestRecord(Base):
 
 def resolve_database_url() -> Optional[str]:
     # Preferred explicit overrides
-    if os.getenv("NETWORK_ONE_DATABASE_URL"):
-        return os.getenv("NETWORK_ONE_DATABASE_URL")
-    if os.getenv("SUPABASE_DB_URL"):
-        return os.getenv("SUPABASE_DB_URL")
-    if os.getenv("DATABASE_URL"):
-        return os.getenv("DATABASE_URL")
+    if _resolve_env("NETWORK_ONE_DATABASE_URL"):
+        return _resolve_env("NETWORK_ONE_DATABASE_URL")
+    if _resolve_env("SUPABASE_DB_URL"):
+        return _resolve_env("SUPABASE_DB_URL")
+    if _resolve_env("DATABASE_URL"):
+        return _resolve_env("DATABASE_URL")
 
     # Build Supabase pooled Postgres URL from standard Supabase envs
     # Expected:
@@ -104,8 +116,8 @@ def resolve_database_url() -> Optional[str]:
     # - SUPABASE_DB_NAME (default: postgres)
     # - SUPABASE_POOLER_PORT (default: 6543)
     # - SUPABASE_SSLMODE (default: require)
-    supabase_url = os.getenv("SUPABASE_URL")
-    db_password = os.getenv("SUPABASE_DB_PASSWORD")
+    supabase_url = _resolve_env("SUPABASE_URL")
+    db_password = _resolve_env("SUPABASE_DB_PASSWORD")
     if not supabase_url or not db_password:
         return None
 
@@ -115,10 +127,10 @@ def resolve_database_url() -> Optional[str]:
     if not project_ref:
         return None
 
-    db_user = os.getenv("SUPABASE_DB_USER", "postgres")
-    db_name = os.getenv("SUPABASE_DB_NAME", "postgres")
-    pooler_port = os.getenv("SUPABASE_POOLER_PORT", "6543")
-    sslmode = os.getenv("SUPABASE_SSLMODE", "require")
+    db_user = _resolve_env("SUPABASE_DB_USER", "postgres")
+    db_name = _resolve_env("SUPABASE_DB_NAME", "postgres")
+    pooler_port = _resolve_env("SUPABASE_POOLER_PORT", "6543")
+    sslmode = _resolve_env("SUPABASE_SSLMODE", "require")
 
     return (
         f"postgresql://{db_user}.{project_ref}:{db_password}"

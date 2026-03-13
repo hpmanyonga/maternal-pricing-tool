@@ -6,14 +6,16 @@ import streamlit as st
 
 def _get_supabase():
     """Return a Supabase client."""
-    url = os.getenv("SUPABASE_URL", "")
-    key = os.getenv("SUPABASE_KEY", "")
-    if not url or not key:
-        try:
-            url = st.secrets.get("SUPABASE_URL", url)
-            key = st.secrets.get("SUPABASE_KEY", key)
-        except Exception:
-            pass
+    # Try st.secrets first (Streamlit Community Cloud), then env vars
+    try:
+        url = st.secrets.get("SUPABASE_URL", "")
+        key = st.secrets.get("SUPABASE_KEY", "")
+    except Exception:
+        url, key = "", ""
+    if not url:
+        url = os.getenv("SUPABASE_URL", "")
+    if not key:
+        key = os.getenv("SUPABASE_KEY", "")
     if not url or not key:
         return None
     from supabase import create_client

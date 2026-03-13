@@ -6,3 +6,5 @@ __pycache__/
 data/*.parquet
 outputs/test_*.docx
 outputs/test_*.pdf
+.env
+.streamlit/secrets.toml
